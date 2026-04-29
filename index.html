@@ -626,23 +626,35 @@ function defaultData() {
     categories: [
       {
         id: uid(), name: '主題', collapsed: false, subgroups: [],
-        items: makeItems(['晚餐', '城市街道', '森林', '海邊', '圖書館', '廢墟'])
+        items: makeItems(['美食', '自然', '微觀', '節日', '故事性', '邀請卡', '門票', '神聖'])
       },
       {
-        id: uid(), name: '風格', collapsed: false, subgroups: [],
-        items: makeItems(['美式漫畫', '梵谷', '遊戲感', '水彩', '素描', '油畫'])
+        id: uid(), name: '風格', collapsed: false,
+        subgroups: [
+          { id: uid(), name: '複雜度', items: makeItems(['簡約', '平衡', '極繁']) },
+          { id: uid(), name: '溫度', items: makeItems(['熱鬧', '冷靜', '沉穩', '輕盈']) },
+          { id: uid(), name: '時間性', items: makeItems(['古老', '經典', '當下', '未來', '平行世界']) },
+          { id: uid(), name: '幻想世界', items: makeItems(['科幻', '玄幻', '奇幻', '魔幻']) }
+        ],
+        items: makeItems(['漫畫', '藝術', '厚塗'])
+      },
+      {
+        id: uid(), name: '其他', collapsed: false, subgroups: [],
+        items: makeItems(['遊戲感', '漂浮', '半透明', '亮亮的', '幾何形', '液體', '線條'])
       },
       {
         id: uid(), name: '顏色', collapsed: false,
         subgroups: [
-          { id: uid(), name: '綠色', items: makeItems(['要有綠色', '不能有綠色']) },
-          { id: uid(), name: '黑色', items: makeItems(['不能有黑色', '要有黑色']) }
+          { id: uid(), name: '白', items: makeItems(['白色', '沒白色']) },
+          { id: uid(), name: '黑', items: makeItems(['黑色', '沒黑色']) },
+          { id: uid(), name: '紅', items: makeItems(['紅色', '沒紅色']) },
+          { id: uid(), name: '綠', items: makeItems(['綠色', '沒綠色']) },
+          { id: uid(), name: '黃', items: makeItems(['黃色', '沒黃色']) },
+          { id: uid(), name: '藍', items: makeItems(['藍色', '沒藍色']) },
+          { id: uid(), name: '紫', items: makeItems(['紫色', '沒紫色']) },
+          { id: uid(), name: '特別色', items: makeItems(['金屬色', '粉色系', '螢光色', '對比色', '彩虹']) }
         ],
         items: []
-      },
-      {
-        id: uid(), name: '其他', collapsed: false, subgroups: [],
-        items: makeItems(['在空中', '半透明', '無機物', '有文字', '夜晚', '下雨', '有光源'])
       }
     ]
   };
