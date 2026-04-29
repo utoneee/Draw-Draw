@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>畫圖抽籤</title>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scrollbar-gutter: stable; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans TC', sans-serif; color: #1a1a1a; }
+
+    /* ════════════════════════════════════════
+       DRAW PAGE
+    ════════════════════════════════════════ */
+
+    #page-draw {
+      background: #7c7c7c;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 0 36px;
+    }
+
+    /* ── Ticket ── */
+    .ticket {
+      background: #fff;
+      width: 100%;
+      max-width: 420px;
+      min-height: calc(100vh - 64px);
+      padding-bottom: 56px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Footer lives in the gray area outside the white ticket */
+    .draw-footer {
+      padding: 22px 0 0;
+      font-size: 0.68rem;
+      color: #9e9e9e;
+      letter-spacing: 0.12em;
+    }
+
+    /* ── Ticket corner circles (Red annotation) ── */
+    /* Gray circles at ticket corners — creates concave cutout feel  */
+    /* 3 corners show ✦ ornament; top-right hides the menu button    */
+    .ticket-corner {
+      position: absolute;
+      width: 46px; height: 46px;
+      border-radius: 50%;
+      background: #7c7c7c;
+      z-index: 10;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .ticket-corner.tl { top: 0; left: 0; transform: translate(-50%, -50%); }
+    .ticket-corner.tr { top: 0; right: 0; transform: translate(50%, -50%); pointer-events: auto; }
+    .ticket-corner.bl { bottom: 0; left: 0; transform: translate(-50%, 50%); }
+    .ticket-corner.br { bottom: 0; right: 0; transform: translate(50%, 50%); }
+    .corner-star {
+      font-size: 1.05rem; color: #a8a8a8; user-select: none; line-height: 1;
+    }
+    .corner-menu {
+      background: none; border: none;
+      font-size: 1.45rem; color: #c0c0c0;
+      cursor: pointer; padding: 0; line-height: 1;
+      transition: color 0.15s;
+    }
+    .corner-menu:hover { color: #fff; }
+
+    /* ── Title ── */
+    .ticket-header { padding: 20px 0 0; position: relative; z-index: 3;
+      background: linear-gradient(to right, transparent 24%, #fff 27%, #fff 73%, transparent 76%);
+    }
+    .header-rule { height: 1.5px; background: #1a1a1a; margin: 7px 0; }
+    .title-img { display: block; width: 132%; margin-left: -16%; height: auto; }
+
+    /* ── Inner frame (difficulty + draw btn + results) ── */
+    .inner-frame {
+      margin: -38px 30px 0;
+      border: 4px solid #de9c21;
+      position: relative;
+      padding-top: 36px;
+    }
+
+    /* Green annotation: concave arc corners on inner frame */
+    /* White circles centered at each corner, same bg as ticket    */
+    /* Their circular border replaces the sharp L-bracket corners  */
+    .if-concave {
+      position: absolute;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: #fff;       /* layer 1: white masks the square corner */
+      z-index: 2; pointer-events: none;
+    }
+    /* layer 2: arc border, clipped to only the inward-facing quarter     */
+    /* clip at 46% instead of 50% so the arc slightly overlaps the frame  */
+    /* border, closing the small gap at the junction                       */
+    .if-concave::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 4px solid #de9c21;
+      background: transparent;
+    }
+    .if-concave.tl { top: 0; left: 0; transform: translate(-50%, -50%); }
+    .if-concave.tl::after { clip-path: inset(43% 0 0 43%); }
+    .if-concave.tr { top: 0; right: 0; transform: translate(50%, -50%); }
+    .if-concave.tr::after { clip-path: inset(43% 43% 0 0); }
+    .if-concave.bl { bottom: 0; left: 0; transform: translate(-50%, 50%); }
+    .if-concave.bl::after { clip-path: inset(0 0 43% 43%); }
+    .if-concave.br { bottom: 0; right: 0; transform: translate(50%, 50%); }
+    .if-concave.br::after { clip-path: inset(0 43% 43% 0); }
+
+    /* ── Difficulty ── */
+    .difficulty { display: flex; align-items: stretch; max-width: 220px; margin: 0 auto 14px; }
+    .diff-col {
+      flex: 1; padding: 8px 6px 8px;
+      text-align: center; cursor: pointer; transition: opacity 0.15s;
+    }
+    .diff-col:hover { opacity: 0.6; }
+    .diff-indicator {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #de9c21; margin: 0 auto 4px; transition: all 0.2s;
+    }
+    .diff-col.active .diff-indicator {
+      width: 20px; height: 3px; border-radius: 2px; background: #1a1a1a;
+    }
+    .diff-name-v { font-size: 0.88rem; font-weight: 700; line-height: 1.7; color: #de9c21; }
+    .diff-col.active .diff-name-v { color: #1a1a1a; }
+    .diff-range { font-size: 0.64rem; color: #aaa; margin-top: 5px; }
+    .diff-sep { width: 1px; background: #e0dbd5; margin: 10px 0; flex-shrink: 0; }
+
+    /* ── Draw button ── */
+    .draw-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; background: #de9c21; color: #fff;
+      border: none; border-top: 4px solid #de9c21;
+      height: 52px; cursor: pointer;
+      transition: opacity 0.15s; padding: 0;
+    }
+    .draw-btn:active { opacity: 0.75; }
+    .btn-label {
+      text-align: center;
+      font-size: 1.1rem; font-weight: 700; letter-spacing: 0.25em;
+    }
+
+    /* ── Results section — INSIDE inner-frame (Black annotation) ── */
+    #results-section {
+      border-top: 4px solid #de9c21;
+      padding: 18px 0 26px;
+    }
+
+    .round-tag-wrap {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 0 12px;
+    }
+    .round-tag {
+      font-size: 0.62rem; font-weight: 700; color: #999;
+      letter-spacing: 0.06em; flex-shrink: 0; color: #de9c21;
+    }
+    .round-rule { flex: 1; height: 3px; background: #de9c21; }
+
+    .result-item { padding: 8px 0; }
+    .result-item-top {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 4px;
+    }
+    .result-text { font-size: 1.05rem; font-weight: 500; color: #1a1a1a; line-height: 1.2; }
+    .result-text.is-added { color: #555; }
+    .added-plus { color: #de9c21; font-weight: 700; margin-right: 1px; }
+    .result-cat { font-size: 0.7rem; color: #aaa; margin-top: 2px; }
+    .result-sep { border: none; border-bottom: 1px dashed #ddd9d3; margin: 0; }
+    .result-delete {
+      background: none; border: none; color: #ccc;
+      font-size: 0.8rem; cursor: pointer; padding: 2px 6px;
+      border-radius: 4px; line-height: 1; flex-shrink: 0;
+      transition: all 0.15s; margin-top: 3px;
+    }
+    .result-delete:hover { color: #e04444; background: #fff0f0; }
+    .empty-hint { text-align: center; color: #bbb; font-size: 0.85rem; padding: 14px 0 6px; }
+
+    /* ── Actions — outside inner-frame ── */
+    #actions-section {
+      display: flex; align-items: center; justify-content: center;
+      gap: 20px; padding: 6px 0 4px;
+    }
+    .action-text {
+      background: none; border: none;
+      font-size: 0.95rem; font-weight: 600; color: #555;
+      cursor: pointer; padding: 4px 10px;
+      transition: color 0.15s; font-family: inherit;
+    }
+    .action-text:hover { color: #1a1a1a; }
+    .action-text:disabled { color: #ccc; cursor: default; }
+    .action-text.save { color: #de9c21; min-width: 3.5em; text-align: center; }
+    .action-text.save:disabled { color: #ccc; }
+    .action-sep { color: #ccc; font-size: 1rem; user-select: none; }
+
+    /* ── Tear line ── */
+    .tear-line {
+      display: flex; align-items: center; margin: 22px 0;
+    }
+    .tear-hole {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: #7c7c7c; flex-shrink: 0;
+      margin: 0 -17px; position: relative; z-index: 1;
+    }
+    .tear-dots {
+      flex: 1; height: 6px; border: none;
+      background-image: radial-gradient(circle at center, #7c7c7c 2.2px, transparent 2.2px);
+      background-size: 10px 5px;
+      background-repeat: repeat-x;
+      background-position: center;
+    }
+
+    /* ── History ── */
+    .history-section { padding-bottom: 8px; }
+    .history-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0 22px 14px;
+      font-size: 0.78rem; font-weight: 700; color: #de9c21; letter-spacing: 0.03em;
+      position: relative; margin-bottom: 12px;
+    }
+    .history-head::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 16px; right: 16px;
+      height: 2.5px; background: #de9c21;
+    }
+    .history-date { font-size: 0.58rem; color: #de9c21; font-weight: 400; }
+    .history-record {
+      padding: 8px 22px 8px 14px;
+      border-left: 10px solid #d8d4ce;
+      margin: 0 22px 0 22px;
+      cursor: pointer; transition: border-left-color 0.15s;
+      position: relative;
+    }
+    .history-record::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 16px; right: 16px;
+      border-bottom: 1.5px dashed #d8d4ce;
+    }
+    .history-record + .history-record { margin-top: 10px; }
+    .history-record:last-child::after { display: none; }
+    .history-record:hover { border-left-color: #de9c21; }
+    .history-record.flash { border-left-color: #f5c96a; }
+    .history-rec-hd {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;
+    }
+    .history-no {
+      font-size: 0.62rem; font-weight: 700; color: #de9c21;
+      letter-spacing: 0.06em;
+    }
+    .history-count { font-size: 0.68rem; color: #ccc; }
+    .copied-hint { display: none; font-size: 0.68rem; color: #de9c21; font-weight: 600; }
+    .history-record.flash .copied-hint { display: inline; }
+    .history-record.flash .history-count { display: none; }
+    .history-items-text { font-size: 0.9rem; color: #333; line-height: 1.4; }
+
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+
+    /* ════════════════════════════════════════
+       LIST PAGE
+    ════════════════════════════════════════ */
+
+    #page-list {
+      background: #7c7c7c;
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 28px 0 48px;
+    }
+    .list-inner {
+      background: #f5f3f0;
+      width: 100%; max-width: 420px;
+      min-height: calc(100vh - 76px);
+      padding: 28px 22px 64px;
+      margin: 0 auto;
+    }
+    .page-header {
+      display: flex; align-items: center;
+      justify-content: space-between; margin-bottom: 6px;
+    }
+    h1 {
+      font-size: 1.1rem; font-weight: 700; letter-spacing: 0.12em; color: #1a1a1a;
+    }
+    .nav-btn {
+      font-size: 0.95rem; font-weight: 700; color: #de9c21; background: none; border: none;
+      cursor: pointer; padding: 4px 0; letter-spacing: 0.04em;
+    }
+    .list-rule { height: 1.5px; background: #1a1a1a; margin-bottom: 20px; }
+    .icon-btn {
+      background: none; border: none; color: #ccc; font-size: 0.95rem;
+      cursor: pointer; padding: 5px 8px; border-radius: 8px; line-height: 1;
+      flex-shrink: 0; transition: all 0.15s;
+    }
+    .icon-btn:hover { color: #e04444; background: #fff0f0; }
+    .drag-handle { color: #de9c21; cursor: grab; padding: 4px 2px; line-height: 1; flex-shrink: 0; touch-action: none; }
+    .drag-handle:active { cursor: grabbing; }
+    .sortable-ghost { opacity: 0.35; }
+    .sortable-drag { box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+
+    .add-category-btn {
+      width: 100%; padding: 10px; border: 1.5px dashed #d0cbc4;
+      border-radius: 6px; background: none; color: #bbb; font-size: .82rem;
+      cursor: pointer; transition: all .15s; margin-bottom: 14px;
+      letter-spacing: 0.06em;
+    }
+    .add-category-btn:hover { border-color: #de9c21; color: #de9c21; background: #fdf7ed; }
+    .add-cat-form { display: flex; gap: 8px; margin-bottom: 14px; }
+    .add-cat-input {
+      flex: 1; border: 1.5px solid #de9c21; border-radius: 6px;
+      padding: 9px 12px; font-size: .88rem; background: white; outline: none; font-family: inherit;
+    }
+    .add-cat-submit {
+      background: #de9c21; color: white; border: none; border-radius: 6px;
+      padding: 9px 14px; font-size: .88rem; font-weight: 600; cursor: pointer;
+    }
+    .add-cat-cancel {
+      background: none; border: 1.5px solid #e0dbd4; border-radius: 6px;
+      padding: 9px 10px; font-size: .88rem; cursor: pointer; color: #aaa;
+    }
+
+    .category-card {
+      background: white; border: 2.5px solid #e0dbd5;
+      border-radius: 6px; margin-bottom: 10px; overflow: hidden;
+    }
+    .category-card.collapsed .card-body { display: none; }
+    .category-card.collapsed .collapse-icon { transform: rotate(-90deg); }
+    .category-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px 10px 8px; border-bottom: 1.5px solid #f0ece6;
+    }
+    .collapse-btn { background: none; border: none; cursor: pointer; color: #de9c21; font-size: 1.8rem; padding: 4px 2px; flex-shrink: 0; }
+    .collapse-icon { display: inline-block; transition: transform .2s; }
+    .category-info { flex: 1; min-width: 0; }
+    .category-meta { font-size: .72rem; color: #bbb; margin-top: 2px; padding-left: 4px; }
+
+    .editable-name {
+      font-weight: 700; font-size: .95rem; border: none; background: transparent;
+      outline: none; padding: 1px 4px; border-radius: 6px; width: 100%;
+      cursor: pointer; color: #2c2c2c; font-family: inherit;
+    }
+    .editable-name:hover { background: #f4f1ec; }
+    .editable-name:focus { background: white; border: 1.5px solid #de9c21; cursor: text; }
+    .editable-sg-name {
+      font-size: .72rem; font-weight: 700; color: #de9c21; letter-spacing: .04em;
+      border: none; background: transparent; outline: none; padding: 1px 4px;
+      border-radius: 5px; cursor: pointer; max-width: 120px; font-family: inherit;
+    }
+    .editable-sg-name:hover { background: #f4f1ec; }
+    .editable-sg-name:focus { background: white; border: 1.5px solid #de9c21; cursor: text; }
+    .editable-item {
+      flex: 1; font-size: .88rem; color: #333; border: none; background: transparent;
+      outline: none; padding: 2px 4px; border-radius: 6px; cursor: pointer; font-family: inherit;
+    }
+    .editable-item:hover { background: #f4f1ec; }
+    .editable-item:focus { background: white; border: 1.5px solid #de9c21; cursor: text; }
+
+    .subgroup { border-bottom: 1px solid #f4f1ec; }
+    .subgroup-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px 6px 12px; }
+    .subgroup-label-wrap { flex: 1; display: flex; align-items: center; gap: 6px; }
+    .sg-hint { font-size: .68rem; color: #c8c0b8; white-space: nowrap; }
+
+    .items-area { padding: 4px 12px 4px 16px; }
+    .items-area.indented { padding-left: 24px; }
+    .item-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+
+    .add-row { display: flex; align-items: flex-start; gap: 6px; padding: 4px 12px 10px 16px; }
+    .add-row.indented { padding-left: 24px; }
+    .add-textarea {
+      flex: 1; border: 1.5px solid #e0dbd4; border-radius: 8px; padding: 6px 10px;
+      font-size: .85rem; background: #faf8f4; outline: none; color: #2c2c2c;
+      resize: none; min-height: 34px; font-family: inherit; line-height: 1.5;
+      overflow-y: auto; field-sizing: content;
+    }
+    .add-textarea:focus { border-color: #de9c21; background: white; }
+    .add-textarea::placeholder { color: #bbb; }
+    .add-confirm {
+      background: #de9c21; color: white; border: none; border-radius: 8px;
+      padding: 6px 12px; font-size: .82rem; font-weight: 600; cursor: pointer;
+      white-space: nowrap; flex-shrink: 0; align-self: flex-end;
+    }
+
+    .card-footer { display: flex; border-top: 1px solid #f0ece6; }
+    .footer-btn {
+      flex: 1; padding: 9px; background: none; border: none;
+      font-size: .8rem; color: #bbb; cursor: pointer; transition: all .15s;
+    }
+    .footer-btn:not(:last-child) { border-right: 1px solid #f0ece6; }
+    .footer-btn:hover { color: #de9c21; background: #fdf7ed; }
+
+    .add-sg-form { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid #f0ece6; }
+    .add-sg-input {
+      flex: 1; border: 1.5px solid #de9c21; border-radius: 8px;
+      padding: 6px 10px; font-size: .85rem; background: white; outline: none; font-family: inherit;
+    }
+    .add-sg-submit {
+      background: #de9c21; color: white; border: none; border-radius: 8px;
+      padding: 6px 12px; font-size: .82rem; font-weight: 600; cursor: pointer;
+    }
+    .add-sg-cancel {
+      background: none; border: 1.5px solid #e0dbd4; border-radius: 8px;
+      padding: 6px 10px; font-size: .82rem; cursor: pointer; color: #aaa;
+    }
+
+    /* ── Export / Import ── */
+    .data-toolbar {
+      display: flex; gap: 8px; margin-bottom: 20px;
+    }
+    .data-btn {
+      flex: 1; padding: 9px 6px; border: 1.5px solid #e0dbd5;
+      border-radius: 6px; background: none; font-size: .8rem; font-weight: 600;
+      color: #aaa; cursor: pointer; transition: all .15s;
+      font-family: inherit; letter-spacing: 0.04em;
+    }
+    .data-btn:hover { border-color: #de9c21; color: #de9c21; background: #fdf7ed; }
+
+    .import-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; padding: 24px;
+    }
+    .import-card {
+      background: #fff; border-radius: 10px; padding: 22px 20px 18px;
+      width: 100%; max-width: 380px; box-shadow: 0 12px 40px rgba(0,0,0,.2);
+    }
+    .import-title {
+      font-size: 0.95rem; font-weight: 700; color: #1a1a1a;
+      margin-bottom: 6px; letter-spacing: 0.06em;
+    }
+    .import-hint {
+      font-size: 0.72rem; color: #aaa; margin-bottom: 14px; line-height: 1.5;
+    }
+    .import-file-btn {
+      display: block; width: 100%; padding: 11px;
+      border: 2px dashed #e0dbd5; border-radius: 8px;
+      background: #faf8f4; color: #888; font-size: .88rem; font-weight: 600;
+      cursor: pointer; text-align: center; margin-bottom: 14px;
+      transition: all .15s; font-family: inherit;
+    }
+    .import-file-btn:hover { border-color: #de9c21; color: #de9c21; background: #fdf7ed; }
+    .import-or {
+      display: flex; align-items: center; gap: 10px;
+      font-size: .72rem; color: #ccc; margin-bottom: 12px;
+    }
+    .import-or::before, .import-or::after {
+      content: ''; flex: 1; height: 1px; background: #e8e4de;
+    }
+    .import-textarea {
+      width: 100%; height: 90px; border: 1.5px solid #e0dbd5;
+      border-radius: 6px; padding: 10px 12px; font-size: .78rem;
+      font-family: monospace; outline: none; resize: none;
+      margin-bottom: 12px; color: #333; line-height: 1.4;
+    }
+    .import-textarea:focus { border-color: #de9c21; }
+    .import-actions { display: flex; gap: 8px; }
+    .import-confirm {
+      flex: 1; padding: 10px; background: #de9c21; color: white;
+      border: none; border-radius: 6px; font-size: .88rem;
+      font-weight: 700; cursor: pointer; font-family: inherit;
+    }
+    .import-cancel {
+      padding: 10px 16px; border: 1.5px solid #e0dbd5; border-radius: 6px;
+      background: none; color: #aaa; font-size: .88rem; cursor: pointer; font-family: inherit;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ 抽籤頁 ══ -->
+<div id="page-draw">
+
+  <div class="ticket">
+
+    <!-- Red annotation: 4 corner circles cut concave feel into ticket  -->
+    <!-- 3 corners = ✦ ornament; top-right = hidden menu button         -->
+    <div class="ticket-corner tl"><span class="corner-star">✦</span></div>
+    <div class="ticket-corner tr"><button class="corner-menu" onclick="showPage('list')">≡</button></div>
+    <div class="ticket-corner bl"><span class="corner-star">✦</span></div>
+    <div class="ticket-corner br"><span class="corner-star">✦</span></div>
+
+    <div class="ticket-header">
+      <img src="參考資料/刊頭_420x84px.png" class="title-img" alt="主題來畫畫">
+    </div>
+
+    <div class="inner-frame">
+      <!-- Green annotation: concave arc circles at inner-frame corners -->
+      <div class="if-concave tl"></div>
+      <div class="if-concave tr"></div>
+      <div class="if-concave bl"></div>
+      <div class="if-concave br"></div>
+
+      <div class="difficulty">
+        <div class="diff-col" data-level="easy" onclick="setDifficulty('easy')">
+          <div class="diff-indicator"></div>
+          <div class="diff-name-v">輕<br>鬆</div>
+        </div>
+        <div class="diff-sep"></div>
+        <div class="diff-col active" data-level="normal" onclick="setDifficulty('normal')">
+          <div class="diff-indicator"></div>
+          <div class="diff-name-v">簡<br>單</div>
+        </div>
+        <div class="diff-sep"></div>
+        <div class="diff-col" data-level="hard" onclick="setDifficulty('hard')">
+          <div class="diff-indicator"></div>
+          <div class="diff-name-v">困<br>難</div>
+        </div>
+      </div>
+
+      <!-- Black annotation: horizontal fold dashes on btn-perf sides -->
+      <button class="draw-btn" onclick="drawNew()">
+        <div class="btn-label">抽<span style="font-size:0.85em;display:inline-block;position:relative;top:-2px;margin:0 1px">✦</span>籤</div>
+      </button>
+
+      <!-- Black annotation: results section moves INSIDE inner-frame  -->
+      <!-- border-top acts as full-width divider to inner-frame edges  -->
+      <div id="results-section" style="display:none">
+        <div class="round-tag-wrap">
+          <span class="round-tag" id="round-label">No.1</span>
+          <div class="round-rule"></div>
+        </div>
+        <div id="results" style="padding: 0 16px"></div>
+      </div>
+    </div>
+
+    <!-- Actions stay OUTSIDE inner-frame -->
+    <div id="actions-section" style="display:none">
+      <button class="action-text" id="btn-add" onclick="drawOne()">+1</button>
+      <span class="action-sep">|</span>
+      <button class="action-text save" id="btn-save" onclick="saveCurrentRound()">記錄</button>
+    </div>
+
+    <div class="tear-line" id="tear-line-el" style="display:none">
+      <div class="tear-hole"></div>
+      <div class="tear-dots"></div>
+      <div class="tear-hole"></div>
+    </div>
+
+    <div class="history-section" id="history-section" style="display:none">
+      <div class="history-head">
+        <span>✦ 歷史抽籤紀錄</span>
+        <span class="history-date" id="history-date"></span>
+      </div>
+      <div id="history"></div>
+    </div>
+
+
+  </div>
+
+  <div class="draw-footer">© UTONEEE 2026</div>
+
+</div>
+
+<!-- ══ 清單管理頁 ══ -->
+<div id="page-list" style="display:none">
+  <div class="list-inner">
+    <div class="page-header">
+      <h1>清單管理</h1>
+      <button class="nav-btn" onclick="showPage('draw')">◀ 回抽籤</button>
+    </div>
+    <div class="list-rule"></div>
+    <div class="data-toolbar">
+      <button class="data-btn" onclick="exportData()">⬇ 匯出清單</button>
+      <button class="data-btn" onclick="showImport()">⬆ 匯入清單</button>
+    </div>
+    <div id="import-version" style="display:none;font-size:.7rem;color:#bbb;margin:-12px 0 18px;letter-spacing:0.03em;"></div>
+    <div id="list-content"></div>
+  </div>
+</div>
+
+<!-- ══ 匯入 Overlay ══ -->
+<div id="import-overlay" class="import-overlay" style="display:none" onclick="if(event.target===this)hideImport()">
+  <div class="import-card">
+    <div class="import-title">匯入清單</div>
+    <div class="import-hint">匯入後將取代目前所有清單內容。</div>
+    <input type="file" id="import-file-input" accept=".json,application/json" style="display:none" onchange="importFromFile(this)">
+    <button class="import-file-btn" onclick="document.getElementById('import-file-input').click()">
+      📂 選擇 JSON 檔案
+    </button>
+    <div id="import-file-info" style="display:none;font-size:.78rem;color:#888;background:#f5f3f0;border-radius:6px;padding:8px 12px;margin-top:-8px;margin-bottom:14px;line-height:1.6;">
+    </div>
+    <div class="import-or">或貼上文字</div>
+    <textarea class="import-textarea" id="import-text" placeholder="貼上 JSON 內容…"></textarea>
+    <div class="import-actions">
+      <button class="import-cancel" onclick="hideImport()">取消</button>
+      <button class="import-confirm" onclick="confirmImport()">確認匯入</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════
+// Utilities
+// ════════════════════════════════════════
+
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function reorderArray(arr, oldIdx, newIdx) {
+  arr.splice(newIdx, 0, arr.splice(oldIdx, 1)[0]);
+}
+
+function makeItems(texts) {
+  return texts.map(text => ({ id: uid(), text }));
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ════════════════════════════════════════
+// Data
+// ════════════════════════════════════════
+
+function defaultData() {
+  return {
+    categories: [
+      {
+        id: uid(), name: '主題', collapsed: false, subgroups: [],
+        items: makeItems(['晚餐', '城市街道', '森林', '海邊', '圖書館', '廢墟'])
+      },
+      {
+        id: uid(), name: '風格', collapsed: false, subgroups: [],
+        items: makeItems(['美式漫畫', '梵谷', '遊戲感', '水彩', '素描', '油畫'])
+      },
+      {
+        id: uid(), name: '顏色', collapsed: false,
+        subgroups: [
+          { id: uid(), name: '綠色', items: makeItems(['要有綠色', '不能有綠色']) },
+          { id: uid(), name: '黑色', items: makeItems(['不能有黑色', '要有黑色']) }
+        ],
+        items: []
+      },
+      {
+        id: uid(), name: '其他', collapsed: false, subgroups: [],
+        items: makeItems(['在空中', '半透明', '無機物', '有文字', '夜晚', '下雨', '有光源'])
+      }
+    ]
+  };
+}
+
+function loadData() {
+  try {
+    const s = localStorage.getItem('drawing-lottery-v1');
+    if (!s) return defaultData();
+    const parsed = JSON.parse(s);
+    if (!parsed?.categories?.length) return defaultData();
+    parsed.categories.forEach(cat => {
+      cat.subgroups = cat.subgroups || [];
+      cat.items = cat.items || [];
+      cat.subgroups.forEach(sg => { sg.items = sg.items || []; });
+    });
+    return parsed;
+  } catch { return defaultData(); }
+}
+
+function saveData() {
+  localStorage.setItem('drawing-lottery-v1', JSON.stringify(appData));
+}
+
+let appData = loadData();
+
+// ════════════════════════════════════════
+// Navigation
+// ════════════════════════════════════════
+
+function showPage(page) {
+  document.getElementById('page-draw').style.display = page === 'draw' ? 'flex' : 'none';
+  document.getElementById('page-list').style.display = page === 'list' ? 'block' : 'none';
+  if (page === 'list') renderList();
+}
+
+// ════════════════════════════════════════
+// Draw Page
+// ════════════════════════════════════════
+
+const DIFFICULTY = { easy: 2, normal: 3, hard: 5 };
+
+let currentDifficulty = 'normal';
+let currentItems = [];
+let roundCount = 0;
+let sessionHistory = [];
+let currentSaved = false;
+
+function setDifficulty(level) {
+  currentDifficulty = level;
+  document.querySelectorAll('.diff-col').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.diff-col[data-level="${level}"]`).classList.add('active');
+}
+
+function buildPool(exclude) {
+  const usedTexts = new Set(exclude.map(i => i.text));
+  const usedSg = new Set(exclude.filter(i => i.subgroup).map(i => `${i.category}::${i.subgroup}`));
+  const pool = [];
+  for (const cat of appData.categories) {
+    for (const sg of (cat.subgroups || [])) {
+      if (usedSg.has(`${cat.name}::${sg.name}`)) continue;
+      const avail = sg.items.map(i => i.text).filter(t => !usedTexts.has(t));
+      if (avail.length) pool.push({ type: 'sg', category: cat.name, subgroup: sg.name, candidates: avail });
+    }
+    for (const item of (cat.items || [])) {
+      if (!usedTexts.has(item.text)) pool.push({ type: 'item', category: cat.name, text: item.text });
+    }
+  }
+  return pool;
+}
+
+function resolveSlot(slot) {
+  if (slot.type === 'sg') {
+    const text = slot.candidates[Math.floor(Math.random() * slot.candidates.length)];
+    return { text, category: slot.category, subgroup: slot.subgroup };
+  }
+  return { text: slot.text, category: slot.category };
+}
+
+function pickN(pool, n) {
+  return [...pool].sort(() => Math.random() - .5).slice(0, n).map(resolveSlot);
+}
+
+function drawNew() {
+  const kept = currentItems.filter(i => i.added);
+  const n = DIFFICULTY[currentDifficulty];
+  const pool = buildPool(kept);
+  currentItems = [...kept, ...pickN(pool, Math.min(n, pool.length))];
+  currentSaved = false;
+  roundCount++;
+  renderCurrent();
+}
+
+function drawOne() {
+  const pool = buildPool(currentItems);
+  if (!pool.length) return;
+  const item = resolveSlot(pool[Math.floor(Math.random() * pool.length)]);
+  item.added = true;
+  if (currentItems.length === 0) roundCount++; // starting fresh with +1
+  currentItems.push(item);
+  currentSaved = false;
+  renderCurrent();
+}
+
+function deleteDrawItem(i) {
+  currentItems.splice(i, 1);
+  currentSaved = false;
+  renderCurrent();
+}
+
+function saveCurrentRound() {
+  if (!currentItems.length || currentSaved) return;
+  sessionHistory.unshift({ round: roundCount, items: [...currentItems] });
+  currentItems = [];
+  currentSaved = true;
+  renderCurrent();
+  renderHistory();
+}
+
+function copyRound(ri, el) {
+  navigator.clipboard.writeText(sessionHistory[ri].items.map(i => i.text).join('、')).then(() => {
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 800);
+  });
+}
+
+function renderCurrent() {
+  // Results section is now INSIDE inner-frame; actions section is outside
+  document.getElementById('results-section').style.display = 'block';
+  document.getElementById('actions-section').style.display = 'flex';
+  document.getElementById('round-label').textContent = `No.${roundCount}`;
+
+  const box = document.getElementById('results');
+  if (currentItems.length === 0) {
+    box.innerHTML = '<div class="empty-hint">已記錄，點 +1 或抽籤繼續</div>';
+  } else {
+    box.innerHTML = currentItems.map((it, i) => `
+      <div class="result-item" style="animation:slideIn .2s ease">
+        <div class="result-item-top">
+          <span class="result-text${it.added ? ' is-added' : ''}">${it.added ? '<span class="added-plus">+</span>' : ''}${escHtml(it.text)}</span>
+          <button class="result-delete" onclick="deleteDrawItem(${i})">✕</button>
+        </div>
+        <div class="result-cat">${escHtml(it.category)}${it.subgroup ? '・' + escHtml(it.subgroup) : ''}</div>
+      </div>`).join('<hr class="result-sep">');
+  }
+
+  const pool = buildPool(currentItems);
+  document.getElementById('btn-add').disabled = !pool.length;
+  document.getElementById('btn-save').disabled = !currentItems.length || currentSaved;
+  document.getElementById('btn-save').textContent = currentSaved ? '已記錄' : '記錄';
+}
+
+function renderHistory() {
+  const sec  = document.getElementById('history-section');
+  const tear = document.getElementById('tear-line-el');
+  if (!sessionHistory.length) {
+    sec.style.display = 'none';
+    tear.style.display = 'none';
+    return;
+  }
+  const today = new Date();
+  const d = `${today.getFullYear()}.${String(today.getMonth()+1).padStart(2,'0')}.${String(today.getDate()).padStart(2,'0')}`;
+  document.getElementById('history-date').textContent = d;
+
+  sec.style.display = 'block';
+  tear.style.display = 'flex';
+  document.getElementById('history').innerHTML = sessionHistory.map((rec, ri) => `
+    <div class="history-record" onclick="copyRound(${ri}, this)">
+      <div class="history-rec-hd">
+        <span class="history-no">No.${rec.round}</span>
+        <span class="history-count">${rec.items.length} 個</span>
+        <span class="copied-hint">已複製</span>
+      </div>
+      <div class="history-items-text">${rec.items.map(it => it.added
+        ? `<span style="color:#666">+${escHtml(it.text)}</span>`
+        : escHtml(it.text)).join('<span style="color:#888"> / </span>')}</div>
+    </div>`).join('');
+}
+
+// ════════════════════════════════════════
+// List Page — Render
+// ════════════════════════════════════════
+
+function countItems(cat) {
+  return (cat.items || []).length + (cat.subgroups || []).reduce((s, sg) => s + (sg.items || []).length, 0);
+}
+
+function renderList() {
+  // Show import version info if available
+  const versionEl = document.getElementById('import-version');
+  if (versionEl) {
+    try {
+      const info = JSON.parse(localStorage.getItem('drawing-lottery-import-info'));
+      if (info) {
+        versionEl.textContent = `📄 ${info.name}  ·  ${info.dateStr} ${info.timeStr}`;
+        versionEl.style.display = 'block';
+      } else {
+        versionEl.style.display = 'none';
+      }
+    } catch { versionEl.style.display = 'none'; }
+  }
+
+  const el = document.getElementById('list-content');
+  if (!el) return;
+  try {
+    el.innerHTML = `
+      <div id="add-cat-trigger">
+        <div class="add-cat-form">
+          <input class="add-cat-input" id="new-cat-name" placeholder="新增類別…"
+            onkeydown="if(event.key==='Enter')submitAddCategory()">
+          <button class="add-cat-submit" onclick="submitAddCategory()">＋</button>
+        </div>
+      </div>
+      <div id="category-list">
+        ${appData.categories.map(renderCatCard).join('')}
+      </div>`;
+  } catch (e) {
+    el.innerHTML = `<p style="color:#e04444;padding:16px">載入失敗，請重新整理頁面。(${e.message})</p>`;
+    return;
+  }
+  initSortables();
+  document.querySelectorAll('.add-textarea').forEach(ta => {
+    ta.addEventListener('input', function () {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+  });
+}
+
+function renderCatCard(cat) {
+  const total = countItems(cat);
+  const meta = cat.subgroups.length
+    ? `${cat.subgroups.length} 個子群組・${total} 個項目`
+    : `${total} 個項目`;
+
+  const body = cat.subgroups.length
+    ? `<div class="subgroup-list" data-cat="${cat.id}">
+         ${cat.subgroups.map(sg => renderSg(cat.id, sg)).join('')}
+       </div>`
+    : `<div class="items-area" data-cat="${cat.id}" data-sg="">
+         ${cat.items.map(it => renderItem(cat.id, '', it)).join('')}
+       </div>
+       <div class="add-row">
+         <textarea class="add-textarea" id="ta-${cat.id}-"
+           placeholder="新增項目，可多行" rows="1"></textarea>
+         <button class="add-confirm" style="font-size:1.1rem;padding:6px 14px" onclick="addItems(this,'${cat.id}','')">＋</button>
+       </div>`;
+
+  return `
+    <div class="category-card${cat.collapsed ? ' collapsed' : ''}" data-id="${cat.id}">
+      <div class="category-header">
+        <span class="drag-handle">⠿</span>
+        <button class="collapse-btn" onclick="toggleCollapse('${cat.id}')">
+          <span class="collapse-icon">▾</span>
+        </button>
+        <div class="category-info">
+          <input class="editable-name" value="${escHtml(cat.name)}"
+            onblur="renameCategory('${cat.id}',this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
+          <div class="category-meta">${meta}</div>
+        </div>
+        <button class="icon-btn" onclick="deleteCategory('${cat.id}')">✕</button>
+      </div>
+      <div class="card-body">
+        ${body}
+        <div class="card-footer" id="footer-${cat.id}">
+          <button class="footer-btn" onclick="showAddSgForm('${cat.id}')">＋ 新增子群組</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderSg(catId, sg) {
+  return `
+    <div class="subgroup" data-id="${sg.id}">
+      <div class="subgroup-header">
+        <span class="drag-handle" style="font-size:.85rem">⠿</span>
+        <div class="subgroup-label-wrap">
+          <input class="editable-sg-name" value="${escHtml(sg.name)}"
+            onblur="renameSg('${catId}','${sg.id}',this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
+          <span class="sg-hint">同組只出現 1 個</span>
+        </div>
+        <button class="icon-btn" onclick="deleteSg('${catId}','${sg.id}')">✕</button>
+      </div>
+      <div class="items-area indented" data-cat="${catId}" data-sg="${sg.id}">
+        ${sg.items.map(it => renderItem(catId, sg.id, it)).join('')}
+      </div>
+      <div class="add-row indented">
+        <textarea class="add-textarea" id="ta-${catId}-${sg.id}"
+          placeholder="新增項目，可多行" rows="1"></textarea>
+        <button class="add-confirm" style="font-size:1.1rem;padding:6px 14px" onclick="addItems(this,'${catId}','${sg.id}')">＋</button>
+      </div>
+    </div>`;
+}
+
+function renderItem(catId, sgId, item) {
+  return `
+    <div class="item-row" data-id="${item.id}">
+      <span class="drag-handle" style="font-size:.85rem">⠿</span>
+      <input class="editable-item" value="${escHtml(item.text)}"
+        onblur="renameItem('${catId}','${sgId}','${item.id}',this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()">
+      <button class="icon-btn" onclick="deleteItem('${catId}','${sgId}','${item.id}')">✕</button>
+    </div>`;
+}
+
+// ════════════════════════════════════════
+// List Page — Sortable
+// ════════════════════════════════════════
+
+function initSortables() {
+  const catList = document.getElementById('category-list');
+  if (catList) {
+    Sortable.create(catList, {
+      handle: '.category-card > .category-header > .drag-handle',
+      animation: 150, ghostClass: 'sortable-ghost', dragClass: 'sortable-drag',
+      onEnd(e) { reorderArray(appData.categories, e.oldIndex, e.newIndex); saveData(); }
+    });
+  }
+  document.querySelectorAll('.items-area[data-cat]').forEach(el => {
+    const cat = appData.categories.find(c => c.id === el.dataset.cat);
+    if (!cat) return;
+    const arr = el.dataset.sg
+      ? (cat.subgroups.find(s => s.id === el.dataset.sg)?.items ?? [])
+      : cat.items;
+    Sortable.create(el, {
+      handle: '.drag-handle', animation: 150, ghostClass: 'sortable-ghost',
+      onEnd(e) { reorderArray(arr, e.oldIndex, e.newIndex); saveData(); }
+    });
+  });
+  document.querySelectorAll('.subgroup-list[data-cat]').forEach(el => {
+    const cat = appData.categories.find(c => c.id === el.dataset.cat);
+    if (!cat) return;
+    Sortable.create(el, {
+      handle: '.subgroup-header > .drag-handle', animation: 150, ghostClass: 'sortable-ghost',
+      onEnd(e) { reorderArray(cat.subgroups, e.oldIndex, e.newIndex); saveData(); }
+    });
+  });
+}
+
+// ════════════════════════════════════════
+// List Page — Actions
+// ════════════════════════════════════════
+
+function toggleCollapse(catId) {
+  const cat = appData.categories.find(c => c.id === catId);
+  if (!cat) return;
+  cat.collapsed = !cat.collapsed;
+  saveData();
+  document.querySelector(`.category-card[data-id="${catId}"]`)?.classList.toggle('collapsed', cat.collapsed);
+}
+
+function showAddCategoryForm() {
+  document.getElementById('add-cat-trigger').innerHTML = `
+    <div class="add-cat-form">
+      <input class="add-cat-input" id="new-cat-name" placeholder="類別名稱"
+        onkeydown="if(event.key==='Enter')submitAddCategory()">
+      <button class="add-cat-submit" onclick="submitAddCategory()">＋</button>
+      <button class="add-cat-cancel" onclick="renderList()">✕</button>
+    </div>`;
+  setTimeout(() => document.getElementById('new-cat-name')?.focus(), 30);
+}
+
+function submitAddCategory() {
+  const name = document.getElementById('new-cat-name')?.value.trim();
+  if (!name) return;
+  appData.categories.push({ id: uid(), name, collapsed: false, subgroups: [], items: [] });
+  saveData(); renderList();
+}
+
+function showAddSgForm(catId) {
+  const footer = document.getElementById(`footer-${catId}`);
+  if (!footer) return;
+  footer.innerHTML = `
+    <div class="add-sg-form">
+      <input class="add-sg-input" id="new-sg-${catId}" placeholder="子群組名稱"
+        onkeydown="if(event.key==='Enter')submitAddSg('${catId}')">
+      <button class="add-sg-submit" onclick="submitAddSg('${catId}')">＋</button>
+      <button class="add-sg-cancel" onclick="renderList()">✕</button>
+    </div>`;
+  setTimeout(() => document.getElementById(`new-sg-${catId}`)?.focus(), 30);
+}
+
+function submitAddSg(catId) {
+  const name = document.getElementById(`new-sg-${catId}`)?.value.trim();
+  if (!name) return;
+  const cat = appData.categories.find(c => c.id === catId);
+  if (!cat) return;
+  cat.subgroups.push({ id: uid(), name, items: [] });
+  saveData(); renderList();
+}
+
+function addItems(btn, catId, sgId) {
+  const ta = btn.previousElementSibling;
+  if (!ta) return;
+  const lines = ta.value.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return;
+  const cat = appData.categories.find(c => c.id === catId);
+  if (!cat) return;
+  const newItems = makeItems(lines);
+  if (sgId) {
+    const sg = cat.subgroups.find(s => s.id === sgId);
+    if (sg) sg.items.push(...newItems);
+  } else {
+    cat.items.push(...newItems);
+  }
+  saveData(); renderList();
+}
+
+function deleteCategory(catId) {
+  if (!confirm('確定刪除此類別及其所有項目？')) return;
+  appData.categories = appData.categories.filter(c => c.id !== catId);
+  saveData(); renderList();
+}
+
+function deleteSg(catId, sgId) {
+  if (!confirm('確定刪除此子群組及其所有項目？')) return;
+  const cat = appData.categories.find(c => c.id === catId);
+  if (!cat) return;
+  cat.subgroups = cat.subgroups.filter(s => s.id !== sgId);
+  saveData(); renderList();
+}
+
+function deleteItem(catId, sgId, itemId) {
+  const cat = appData.categories.find(c => c.id === catId);
+  if (!cat) return;
+  if (sgId) {
+    const sg = cat.subgroups.find(s => s.id === sgId);
+    if (sg) sg.items = sg.items.filter(i => i.id !== itemId);
+  } else {
+    cat.items = cat.items.filter(i => i.id !== itemId);
+  }
+  saveData(); renderList();
+}
+
+function renameCategory(catId, val) {
+  const name = val.trim(); if (!name) return;
+  const cat = appData.categories.find(c => c.id === catId);
+  if (cat && cat.name !== name) { cat.name = name; saveData(); }
+}
+
+function renameSg(catId, sgId, val) {
+  const name = val.trim(); if (!name) return;
+  const cat = appData.categories.find(c => c.id === catId);
+  const sg = cat?.subgroups.find(s => s.id === sgId);
+  if (sg && sg.name !== name) { sg.name = name; saveData(); }
+}
+
+function renameItem(catId, sgId, itemId, val) {
+  const text = val.trim(); if (!text) return;
+  const cat = appData.categories.find(c => c.id === catId);
+  if (!cat) return;
+  const arr = sgId ? (cat.subgroups.find(s => s.id === sgId)?.items ?? []) : cat.items;
+  const item = arr.find(i => i.id === itemId);
+  if (item && item.text !== text) { item.text = text; saveData(); }
+}
+
+// ════════════════════════════════════════
+// Export / Import
+// ════════════════════════════════════════
+
+function exportData() {
+  const json = JSON.stringify(appData, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const date = new Date().toISOString().slice(0, 10);
+  a.download = `drawing-lottery-${date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function showImport() {
+  document.getElementById('import-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('import-text')?.focus(), 50);
+}
+
+function hideImport() {
+  document.getElementById('import-overlay').style.display = 'none';
+  document.getElementById('import-text').value = '';
+  const info = document.getElementById('import-file-info');
+  info.style.display = 'none';
+  info.innerHTML = '';
+}
+
+let pendingFileDate = null;
+
+function importFromFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('import-text').value = e.target.result;
+    // Store file date for display after import
+    const d = new Date(file.lastModified);
+    pendingFileDate = {
+      name: file.name,
+      dateStr: `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`,
+      timeStr: `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+    };
+    // Show file info inside overlay for confirmation
+    const info = document.getElementById('import-file-info');
+    info.innerHTML = `📄 ${escHtml(file.name)}<br><span style="color:#bbb">修改時間：${pendingFileDate.dateStr} ${pendingFileDate.timeStr}</span>`;
+    info.style.display = 'block';
+  };
+  reader.onerror = () => alert('讀取檔案失敗，請重試。');
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function confirmImport() {
+  const text = document.getElementById('import-text').value.trim();
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed?.categories?.length) throw new Error('找不到清單資料');
+    parsed.categories.forEach(cat => {
+      cat.subgroups = cat.subgroups || [];
+      cat.items = cat.items || [];
+      cat.subgroups.forEach(sg => { sg.items = sg.items || []; });
+    });
+    appData = parsed;
+    saveData();
+    // Save import version info to localStorage
+    if (pendingFileDate) {
+      localStorage.setItem('drawing-lottery-import-info', JSON.stringify(pendingFileDate));
+      pendingFileDate = null;
+    }
+    hideImport();
+    renderList();
+  } catch(e) {
+    alert('匯入失敗：' + e.message + '\n\n請確認貼入的是正確的 JSON 內容。');
+  }
+}
+</script>
+</body>
+</html>
