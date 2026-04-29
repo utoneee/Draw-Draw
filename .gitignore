@@ -1,0 +1,6 @@
+# Version backups (local only)
+app-v*.html
+app.html
+
+# Reference images (not needed on GitHub)
+參考資料/*.jpg
