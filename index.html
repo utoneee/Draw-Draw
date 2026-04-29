@@ -568,10 +568,11 @@
     </div>
     <div class="list-rule"></div>
     <div class="data-toolbar">
-      <button class="data-btn" onclick="exportData()">⬇ 匯出清單</button>
-      <button class="data-btn" onclick="showImport()">⬆ 匯入清單</button>
+      <button class="data-btn" onclick="exportData()">⬆ 匯出清單</button>
+      <button class="data-btn" onclick="showImport()">⬇ 匯入清單</button>
     </div>
-    <div id="import-version" style="display:none;font-size:.7rem;color:#bbb;margin:-12px 0 18px;letter-spacing:0.03em;"></div>
+    <div id="import-version" style="display:none;font-size:.72rem;color:#1a1a1a;margin:-12px 0 18px;letter-spacing:0.03em;text-align:center;"></div>
+    <div id="default-notice" style="display:none;font-size:.72rem;color:#1a1a1a;margin:-8px 0 18px;letter-spacing:0.03em;text-align:center;">✦ 預設範例，請匯入自己的清單 ✦</div>
     <div id="list-content"></div>
   </div>
 </div>
@@ -677,6 +678,9 @@ function loadData() {
 
 function saveData() {
   localStorage.setItem('drawing-lottery-v1', JSON.stringify(appData));
+  if (localStorage.getItem('drawing-lottery-import-info')) {
+    localStorage.setItem('drawing-lottery-dirty', '1');
+  }
 }
 
 let appData = loadData();
@@ -849,12 +853,20 @@ function renderList() {
     try {
       const info = JSON.parse(localStorage.getItem('drawing-lottery-import-info'));
       if (info) {
-        versionEl.textContent = `📄 ${info.name}  ·  ${info.dateStr} ${info.timeStr}`;
+        const isDirty = !!localStorage.getItem('drawing-lottery-dirty');
+        const right = isDirty ? '已編輯請匯出' : `${info.dateStr} ${info.timeStr}`;
+        versionEl.textContent = `✦ ${info.name} · ${right} ✦`;
+        versionEl.style.color = isDirty ? '#1a1a1a' : '#bbb';
         versionEl.style.display = 'block';
       } else {
         versionEl.style.display = 'none';
       }
     } catch { versionEl.style.display = 'none'; }
+  }
+  const noticeEl = document.getElementById('default-notice');
+  if (noticeEl) {
+    const hasImport = !!localStorage.getItem('drawing-lottery-import-info');
+    noticeEl.style.display = hasImport ? 'none' : 'block';
   }
 
   const el = document.getElementById('list-content');
@@ -1128,6 +1140,9 @@ function exportData() {
   a.download = `DrawDraw-${date}.json`;
   a.click();
   URL.revokeObjectURL(url);
+  localStorage.removeItem('drawing-lottery-dirty');
+  const vEl = document.getElementById('import-version');
+  if (vEl && vEl.style.display !== 'none') renderList();
 }
 
 function showImport() {
@@ -1160,7 +1175,7 @@ function importFromFile(input) {
     };
     // Show file info inside overlay for confirmation
     const info = document.getElementById('import-file-info');
-    info.innerHTML = `📄 ${escHtml(file.name)}<br><span style="color:#bbb">修改時間：${pendingFileDate.dateStr} ${pendingFileDate.timeStr}</span>`;
+    info.innerHTML = `<span style="color:#de9c21">✦</span> ${escHtml(file.name)}<br><span style="color:#bbb">修改時間：${pendingFileDate.dateStr} ${pendingFileDate.timeStr}</span>`;
     info.style.display = 'block';
   };
   reader.onerror = () => alert('讀取檔案失敗，請重試。');
@@ -1183,6 +1198,7 @@ function confirmImport() {
     // Save import version info to localStorage
     if (pendingFileDate) {
       localStorage.setItem('drawing-lottery-import-info', JSON.stringify(pendingFileDate));
+      localStorage.removeItem('drawing-lottery-dirty');
       pendingFileDate = null;
     }
     hideImport();
