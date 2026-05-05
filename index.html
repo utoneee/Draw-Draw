@@ -95,9 +95,9 @@
       background: #fff;       /* layer 1: white masks the square corner */
       z-index: 2; pointer-events: none;
     }
-    /* layer 2: arc border, clipped to only the inward-facing quarter     */
-    /* clip at 46% instead of 50% so the arc slightly overlaps the frame  */
-    /* border, closing the small gap at the junction                       */
+    /* layer 2: arc border, clipped to only the inward-facing quarter      */
+    /* clip at 41.5% instead of 50% so the arc slightly overlaps the frame */
+    /* border, closing the small gap at the junction                        */
     .if-concave::after {
       content: '';
       position: absolute;
@@ -131,7 +131,6 @@
     }
     .diff-name-v { font-size: 0.88rem; font-weight: 700; line-height: 1.7; color: #de9c21; }
     .diff-col.active .diff-name-v { color: #1a1a1a; }
-    .diff-range { font-size: 0.64rem; color: #aaa; margin-top: 5px; }
     .diff-sep { width: 1px; background: #e0dbd5; margin: 10px 0; flex-shrink: 0; }
 
     /* ── Draw button ── */
@@ -158,8 +157,8 @@
       display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 0 12px;
     }
     .round-tag {
-      font-size: 0.62rem; font-weight: 700; color: #999;
-      letter-spacing: 0.06em; flex-shrink: 0; color: #de9c21;
+      font-size: 0.62rem; font-weight: 700; color: #de9c21;
+      letter-spacing: 0.06em; flex-shrink: 0;
     }
     .round-rule { flex: 1; height: 3px; background: #de9c21; }
 
@@ -307,13 +306,6 @@
     .sortable-ghost { opacity: 0.35; }
     .sortable-drag { box-shadow: 0 8px 24px rgba(0,0,0,.12); }
 
-    .add-category-btn {
-      width: 100%; padding: 10px; border: 1.5px dashed #d0cbc4;
-      border-radius: 6px; background: none; color: #bbb; font-size: .82rem;
-      cursor: pointer; transition: all .15s; margin-bottom: 14px;
-      letter-spacing: 0.06em;
-    }
-    .add-category-btn:hover { border-color: #de9c21; color: #de9c21; background: #fdf7ed; }
     .add-cat-form { display: flex; gap: 8px; margin-bottom: 14px; }
     .add-cat-input {
       flex: 1; border: 1.5px solid #de9c21; border-radius: 6px;
@@ -1020,17 +1012,6 @@ function toggleCollapse(catId) {
   document.querySelector(`.category-card[data-id="${catId}"]`)?.classList.toggle('collapsed', cat.collapsed);
 }
 
-function showAddCategoryForm() {
-  document.getElementById('add-cat-trigger').innerHTML = `
-    <div class="add-cat-form">
-      <input class="add-cat-input" id="new-cat-name" placeholder="類別名稱"
-        onkeydown="if(event.key==='Enter')submitAddCategory()">
-      <button class="add-cat-submit" onclick="submitAddCategory()">＋</button>
-      <button class="add-cat-cancel" onclick="renderList()">✕</button>
-    </div>`;
-  setTimeout(() => document.getElementById('new-cat-name')?.focus(), 30);
-}
-
 function submitAddCategory() {
   const name = document.getElementById('new-cat-name')?.value.trim();
   if (!name) return;
@@ -1196,11 +1177,17 @@ function confirmImport() {
     appData = parsed;
     saveData();
     // Save import version info to localStorage
-    if (pendingFileDate) {
-      localStorage.setItem('drawing-lottery-import-info', JSON.stringify(pendingFileDate));
-      localStorage.removeItem('drawing-lottery-dirty');
-      pendingFileDate = null;
-    }
+    const importInfo = pendingFileDate || (() => {
+      const d = new Date();
+      return {
+        name: '貼上匯入',
+        dateStr: `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`,
+        timeStr: `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+      };
+    })();
+    localStorage.setItem('drawing-lottery-import-info', JSON.stringify(importInfo));
+    localStorage.removeItem('drawing-lottery-dirty');
+    pendingFileDate = null;
     hideImport();
     renderList();
   } catch(e) {
